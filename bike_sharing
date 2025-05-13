@@ -1,0 +1,517 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.ensemble import GradientBoostingRegressor, ExtraTreesRegressor, AdaBoostRegressor, RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.neural_network import MLPRegressor
+from lightgbm import LGBMRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from catboost import CatBoostRegressor
+import warnings
+warnings.filterwarnings('ignore')
+
+# 加载数据
+data = pd.read_csv('bike_sharing_hour_data.csv')
+# 提取特征和目标变量
+x = data.drop('cnt', axis=1)
+y = data['cnt']
+
+assert len(x) == len(y), "x和y的行数不匹配"
+
+X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+def mean_absolute_percentage_error(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    y_true = np.where(y_true == 0, 1e-10, y_true)
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+
+
+models = {
+    "GBDT": GradientBoostingRegressor(
+        n_estimators=100,          # 减少树的数量
+        max_depth=4,               # 减小深度
+        learning_rate=0.1,         # 增加学习率
+        min_samples_split=20,      # 增加分割限制
+        min_samples_leaf=10,       # 增加叶节点限制
+        max_features=0.6,          # 减少特征采样比例
+        random_state=42,
+        subsample=0.7              # 减少样本采样
+    ),
+    "LightGBM": LGBMRegressor(
+        n_estimators=150,          # 减少树的数量
+        num_leaves=31,             # 减少叶节点数
+        max_depth=4,               # 减少深度
+        min_child_samples=20,      # 增加子节点样本限制
+        reg_alpha=0.5,             # 增加正则化强度
+        reg_lambda=0.5,
+        learning_rate=0.08,        # 增加学习率
+        feature_fraction=0.6,      # 减少特征采样
+        random_state=42
+    ),
+    "CatBoost": CatBoostRegressor(
+        iterations=150,            # 减少迭代次数
+        depth=5,                   # 减少树深度
+        learning_rate=0.1,
+        l2_leaf_reg=5,             # 增加L2正则化
+        random_seed=42,
+        verbose=0,
+        grow_policy='SymmetricTree' # 简化生长策略
+    ),
+    "Extra Trees": ExtraTreesRegressor(
+        n_estimators=400,          # 增加树的数量
+        max_depth=12,              # 增加深度
+        min_samples_split=5,       # 减少分割限制
+        min_samples_leaf=2,        # 允许更细粒度的分割
+        max_features=0.8,          # 增加特征使用比例
+        bootstrap=True,
+        random_state=42
+    ),
+    "AdaBoost": AdaBoostRegressor(
+        DecisionTreeRegressor(max_depth=7), # 使用更复杂的基学习器
+        n_estimators=500,          # 增加基学习器数量
+        learning_rate=0.18,         # 调整学习率
+        random_state=42
+    ),
+    "Random Forest": RandomForestRegressor(
+        n_estimators=400,          # 增加树的数量
+        max_depth=10,              # 增加深度
+        max_features=0.7,
+        min_samples_split=5,       # 减少分割限制
+        min_samples_leaf=2,        # 允许更细粒度的分割
+        random_state=42
+    ),
+    "Decision Tree": DecisionTreeRegressor(
+        max_depth=12,              # 增加深度
+        min_samples_split=5,       # 减少分割限制
+        min_samples_leaf=2,        # 允许更细粒度的分割
+        max_features=0.8,
+        random_state=42,
+        ccp_alpha=0.001             # 减少剪枝强度
+    ),
+    "BPNN": make_pipeline(
+        StandardScaler(),
+        MLPRegressor(
+            hidden_layer_sizes=(100, 50),  # 缩小网络结构
+            activation='relu',
+            solver='adam',
+            alpha=0.001,           # 增加正则化
+            learning_rate_init=0.001,
+            early_stopping=True,
+            n_iter_no_change=15,
+            max_iter=1000,         # 减少训练轮次
+            random_state=42,
+            batch_size=128         # 增加批大小
+        )
+    )
+}
+
+# 训练和评估流程
+results = []
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    r2 = r2_score(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mape = mean_absolute_percentage_error(y_test, y_pred)
+
+    results.append({
+        'Model': name,
+        'R2': round(r2, 3),
+        'MAE': round(mae, 3),
+        'RMSE': round(rmse, 3),
+        'MAPE': round(mape, 3)
+    })
+
+results_df = pd.DataFrame(results)
+print(results_df.to_string(index=False))
+
+
+
+
+
+
+import pandas as pd
+import optuna
+import random
+import xgboost as xgb
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from xgboost import XGBRegressor
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import r2_score
+
+orders = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+params = [
+    {'learning_rate': 0.066, 'max_depth': 9, 'alpha': 7.068160030014228e-08, 'lambda': 9.836732611118373},
+    {'learning_rate': 0.026, 'max_depth': 9, 'alpha': 0.0005586152326291925, 'lambda': 6.665858991068008e-06},
+    {'learning_rate': 0.026, 'max_depth': 10, 'alpha': 0.0001469903098460695, 'lambda': 7.202205475061036},
+    {'learning_rate': 0.021, 'max_depth': 9, 'alpha': 4.819906055111482, 'lambda': 4.846394923989192},
+    {'learning_rate': 0.016, 'max_depth': 10, 'alpha': 0.004421503951487588, 'lambda': 6.030274756563353},
+    {'learning_rate': 0.021, 'max_depth': 9, 'alpha': 1.0388914384623162, 'lambda': 3.81777990199648},
+    {'learning_rate': 0.031, 'max_depth': 10, 'alpha': 1.0592054172911938e-05, 'lambda': 6.7937284124460815},
+    {'learning_rate': 0.031, 'max_depth': 9, 'alpha': 1.7514008937314591e-06, 'lambda': 4.936661573010627},
+    {'learning_rate': 0.026, 'max_depth': 10, 'alpha': 4.645483901082725e-06, 'lambda': 6.938317041065863}
+]
+
+# [[0.5, dict_items([('learning_rate', 0.041), ('max_depth', 3), ('alpha', 7.0789342989289565), ('lambda', 1.4454238072341246e-08)])],
+#  [0.7, dict_items([('learning_rate', 0.036000000000000004), ('max_depth', 3), ('alpha', 2.3180485607861914e-08), ('lambda', 0.0037736852861474978)])],
+#  [0.8, dict_items([('learning_rate', 0.046), ('max_depth', 3), ('alpha', 0.0004255651584950091), ('lambda', 0.00025360004314215346)])],
+#  [0.9, dict_items([('learning_rate', 0.046), ('max_depth', 3), ('alpha', 2.005615409682022e-06), ('lambda', 0.012323717308285877)])]]
+
+
+data = pd.read_csv('bike_sharing_hour_data.csv')
+# 提取特征和目标变量
+X = data.drop('cnt', axis=1)
+y = data['cnt']
+
+# 分割数据集
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+y_valid = y_valid.to_numpy().reshape(test_num, 1)
+
+k = 10
+
+
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1) ** k
+    t = t / gamma(k + 1)
+    return t
+
+
+def f(x):
+    return (x ** 2) / 2
+
+
+def ncasual(coef, x, f):
+    global k
+    p4 = []
+    p5 = []
+    for i in range(0, k):
+        temp1 = f(x + i)
+        temp2 = f(x - i)
+        p4.append(temp1)
+        p5.append(temp2)
+    out = (sum(np.array(coef).T * (np.array(p5) - np.array(p4))))
+    return out
+
+
+def custom_train(y_true, y_pred):
+    global t, epsilon
+    residual = (y_true - y_pred).astype("float")
+    grad = -ncasual(coef, residual, f)
+    hess = np.where(residual < 0, 1.0, 1.0)
+    return grad, hess
+
+
+rs = []
+for i, ordered in enumerate(orders):
+
+    pa = params[i]
+
+    coef = []
+    pa = params[i]
+    for i in range(0, k):
+        coef.append(coefficient(i, ordered))
+
+    coef = [coef] * train_num
+
+    xgbr = xgb.XGBRegressor(**pa)
+    evals_results = {}
+
+    xgbr.set_params(**{'objective': custom_train},
+                    n_estimators=400)
+
+    # fitting model
+    xgbr.fit(x_train, y_train, eval_set=[(x_valid, y_valid)], eval_metric=['mae', 'rmse'])
+
+    pred_y = xgbr.predict(x_valid)
+    # y_valid = y_valid.to_numpy().reshape(test_num,1)
+
+    a = xgbr.evals_result_.pop('validation_0')
+    out = pd.DataFrame(a['rmse'])
+    out1 = pd.DataFrame(a['mae'])
+
+    from sklearn.metrics import mean_absolute_percentage_error as mape
+
+    rs.append([
+        ordered,
+        mae(y_valid, pred_y),
+        r2_score(y_valid, pred_y),
+        mape(y_valid, pred_y),
+        mse(y_valid, pred_y) ** (1 / 2)
+    ])
+
+print(rs)
+# = pd.DataFrame(evals_result)
+# a.to_excel('./1.xlsx')
+
+
+# out = pd.DataFrame(a['rmse'])
+# out1 = pd.DataFrame(pred_y)
+# out.to_csv('output/fom.csv')
+# out1.to_csv('output/fopred.csv')
+# plt.plot(pred_y,label = 'pred')
+# plt.plot(y_valid, label = 'true')
+# plt.legend()
+# plt.show()
+
+
+# = pd.DataFrame(evals_result)
+# a.to_excel('./1.xlsx')
+
+
+
+
+
+
+
+
+
+
+
+import pandas as pd
+import optuna
+import random
+import xgboost as xgb
+from xgboost import XGBRegressor
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import r2_score
+
+# orders = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+orders = [0.5]
+
+data = pd.read_csv('bike_sharing_hour_data.csv')
+# 提取特征和目标变量
+X = data.drop('cnt', axis=1)
+y = data['cnt']
+
+# 分割数据集
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+k = 10
+ls = []
+for ordered in orders:
+    def coefficient(k, ordered):
+        t = 1
+        for i in range(0, k):
+            t *= (ordered - i)
+        t *= (-1) ** k
+        t = t / gamma(k + 1)
+        return t
+
+
+    # 计算系数
+    coef = []
+    for i in range(0, k):
+        coef.append(coefficient(i, ordered))
+
+    coef = [coef] * train_num
+
+
+    def f(x):
+        return (x ** 2) / 2
+
+
+    def ncasual(coef, x, f):
+        global k
+        p4 = []
+        p5 = []
+        for i in range(0, k):
+            temp1 = f(x + i)
+            temp2 = f(x - i)
+            p4.append(temp1)
+            p5.append(temp2)
+        out = (sum(np.array(coef).T * (np.array(p5) - np.array(p4))))
+        return out
+
+
+    def custom_train(y_true, y_pred):
+        global t, epsilon
+        residual = (y_true - y_pred).astype("float")
+        grad = -ncasual(coef, residual, f)
+        hess = np.where(residual < 0, 1.0, 1.0)
+        return grad, hess
+
+
+    xgbr = xgb.XGBRegressor()
+
+
+    def objective(trial):
+        pruning_callback = optuna.integration.LightGBMPruningCallback(trial, mse)
+        params = {
+            'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.251, step=0.005),
+            'max_depth': trial.suggest_int('max_depth', 3, 10, step=1),
+            "alpha": trial.suggest_float("alpha", 1e-8, 10.0, log=True),
+            "lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
+        }
+        model = XGBRegressor(**params, n_estimators=400, objective=custom_train)
+        model.fit(x_train, y_train)
+        pred_y = model.predict(x_valid)
+        score = mse(y_valid, pred_y) ** (1 / 2)
+        return score
+
+
+    study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner)
+
+    study.optimize(objective, n_trials=300)
+
+    # print("Number of finished trials: ({})".format(len(study.trials)))
+
+    # print("Best trial:")
+    trial = study.best_trial
+    ls.append([ordered, trial.params.items()])
+# print("  Value: {}".format(trial.value))
+
+# print("  Params: ")
+# for key, value in trial.params.items():
+# 	print("    {}: {}".format(key, value))
+print(ls)
+
+
+
+
+
+
+import pandas as pd
+import random
+import xgboost as xgb
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, mean_absolute_percentage_error as mape
+
+
+data = pd.read_csv('bike_sharing_hour_data.csv')
+# 提取特征和目标变量
+X = data.drop('cnt', axis=1)
+y = data['cnt']
+
+# 分割数据集
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+y_valid = y_valid.to_numpy().reshape(test_num, 1)
+
+# 创建XGBoost回归模型
+xgbr = xgb.XGBRegressor()
+
+# 设置模型参数
+xgbr.set_params(
+    learning_rate=0.026,
+    max_depth=5,
+    alpha=3.9809112210358e-08,
+    reg_lambda=4.371049910693518e-07,
+    n_estimators=400
+)
+
+
+# 训练模型
+xgbr.fit(x_train, y_train, eval_set=[(x_valid, y_valid)], eval_metric=['mae', 'rmse'])
+
+# 预测并评估
+pred_y = xgbr.predict(x_valid)
+
+a = xgbr.evals_result_.pop('validation_0')
+out = pd.DataFrame(a['rmse'])
+out1 = pd.DataFrame(a['mae'])
+
+print(f"MAE is {mean_absolute_error(y_valid, pred_y)}")
+print(f"R2 is {r2_score(y_valid, pred_y)}")
+print(f"mape is {mape(y_valid, pred_y)}")
+print(f"rmse is {mean_squared_error(y_valid, pred_y) ** (1 / 2)}")
+
+
+
+
+
+
+
+
+import pandas as pd
+import optuna
+import random
+import xgboost as xgb
+from xgboost import XGBRegressor
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import r2_score
+
+
+data = pd.read_csv('bike_sharing_hour_data.csv')
+# 提取特征和目标变量
+X = data.drop('cnt', axis=1)
+y = data['cnt']
+
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+y_valid = y_valid.to_numpy().reshape(test_num, 1)
+
+# default lightgbm model with sklearn api
+xgbr = xgb.XGBRegressor()
+
+
+def objective(trial):
+    pruning_callback = optuna.integration.LightGBMPruningCallback(trial, mse)
+    params = {
+        'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.251, step=0.005),
+        'max_depth': trial.suggest_int('max_depth', 3, 10, step=1),
+        "alpha": trial.suggest_float("alpha", 1e-8, 10.0, log=True),
+        "lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
+        "min_child_weight": trial.suggest_int("min_child_weight", 1, 300),
+    }
+    model = XGBRegressor(**params, n_estimators=400)
+    model.fit(x_train, y_train)
+    pred_y = model.predict(x_valid)
+    score = r2_score(y_valid, pred_y)
+    return score
+
+
+study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner)
+
+study.optimize(objective, n_trials=300)
+
+print("Number of finished trials: ({})".format(len(study.trials)))
+
+print("Best trial:")
+trial = study.best_trial
+
+print("  Value: {}".format(trial.value))
+
+print("  Params: ")
+for key, value in trial.params.items():
+    print("    {}: {}".format(key, value))
+
