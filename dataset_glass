@@ -1,0 +1,492 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.ensemble import GradientBoostingRegressor, ExtraTreesRegressor, AdaBoostRegressor, RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.neural_network import MLPRegressor
+from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
+import warnings
+warnings.filterwarnings('ignore')
+
+# 加载数据
+data = pd.read_csv('glass_data.csv', header=0)
+x = data.drop(['Id', 'RI', 'Type'], axis=1)
+y = data['RI']
+
+X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+def mean_absolute_percentage_error(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    y_true = np.where(y_true == 0, 1e-10, y_true)
+    return np.mean(np.abs((y_true - y_pred) / y_true))
+
+# 优化后的模型参数配置
+# 优化后的模型参数配置
+models = {
+    "GBDT": GradientBoostingRegressor(
+        n_estimators=200,
+        max_depth=5,
+        learning_rate=0.08,
+        min_samples_split=8,
+        min_samples_leaf=5,
+        max_features=0.8,
+        random_state=42,
+        subsample=0.6
+    ),
+    "LightGBM": LGBMRegressor(
+        n_estimators=500,
+        num_leaves=50,
+        max_depth=8,
+        min_child_samples=5,
+        reg_alpha=0.002,
+        reg_lambda=0.02,
+        learning_rate=0.05,
+        feature_fraction=0.9,
+        random_state=42
+    ),
+    "CatBoost": CatBoostRegressor(
+        iterations=300,            # 增加迭代次数
+        depth=8,                   # 增加树深度
+        learning_rate=0.05,
+        l2_leaf_reg=2,             # 减少L2正则化
+        random_seed=42,
+        verbose=0,
+        grow_policy='Lossguide'    # 优化生长策略
+    ),
+    "Extra Trees": ExtraTreesRegressor(
+        n_estimators=1000,
+        max_depth=12,
+        min_samples_split=4,
+        min_samples_leaf=2,
+        max_features=0.9,
+        bootstrap=True,
+        random_state=42
+    ),
+    "AdaBoost": AdaBoostRegressor(
+        n_estimators=300,
+        learning_rate=0.05,
+        random_state=42,
+        estimator=DecisionTreeRegressor(max_depth=5)
+    ),
+    "Random Forest": RandomForestRegressor(
+        n_estimators=300,
+        max_depth=15,
+        max_features=0.9,
+        min_samples_split=10,
+        min_samples_leaf=4,
+        random_state=42
+    ),
+    "Decision Tree": DecisionTreeRegressor(
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        max_features=None,
+        random_state=42,
+        ccp_alpha=0
+    ),
+    "BPNN": make_pipeline(
+        StandardScaler(),
+        MLPRegressor(
+            hidden_layer_sizes=(64, 32),
+            activation='relu',
+            solver='adam',
+            alpha=0.00002,
+            learning_rate_init=0.092,
+            early_stopping=True,
+            n_iter_no_change=30,
+            max_iter=2000,
+            random_state=42,
+            batch_size=64
+        )
+    )
+}
+
+
+
+# 训练和评估流程
+results = []
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    r2 = r2_score(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mape = mean_absolute_percentage_error(y_test, y_pred)
+
+    results.append({
+        'Model': name,
+        'R2': round(r2, 6),
+        'MAE': round(mae, 6),
+        'RMSE': round(rmse, 6),
+        'MAPE': round(mape, 6)
+    })
+
+results_df = pd.DataFrame(results)
+print(results_df.to_string(index=False))
+
+
+import pandas as pd
+import optuna
+import random
+import xgboost as xgb
+from xgboost import XGBRegressor
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import r2_score
+
+orders = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+params = [
+    {'learning_rate': 0.066, 'max_depth': 3, 'alpha': 8.523002680171145e-06, 'lambda': 3.715323700697921e-06},
+    {'learning_rate': 0.196, 'max_depth': 4, 'alpha': 2.7315136937604188e-06, 'lambda': 9.252857368850415e-06},
+    {'learning_rate': 0.096, 'max_depth': 10, 'alpha': 0.004758952834359745, 'lambda': 3.297944822104696e-08},
+    {'learning_rate': 0.151, 'max_depth': 7, 'alpha': 0.0040504486794827035, 'lambda': 9.807502803512741e-05},
+    {'learning_rate': 0.041, 'max_depth': 3, 'alpha': 3.776980684369119e-07, 'lambda': 2.0173748430577877e-05},
+    {'learning_rate': 0.156, 'max_depth': 3, 'alpha': 0.0032257055793450486, 'lambda': 0.4238585809551214},
+    {'learning_rate': 0.091, 'max_depth': 5, 'alpha': 1.4980246955649e-06, 'lambda': 7.776041732287413e-06},
+    {'learning_rate': 0.176, 'max_depth': 8, 'alpha': 0.00021800304620881884, 'lambda': 0.07727871289806292},
+    {'learning_rate': 0.031, 'max_depth': 6, 'alpha': 0.00010201109529905346, 'lambda': 8.633367104891843e-07}
+]
+
+# [[0.5, dict_items([('learning_rate', 0.041), ('max_depth', 3), ('alpha', 7.0789342989289565), ('lambda', 1.4454238072341246e-08)])],
+#  [0.7, dict_items([('learning_rate', 0.036000000000000004), ('max_depth', 3), ('alpha', 2.3180485607861914e-08), ('lambda', 0.0037736852861474978)])],
+#  [0.8, dict_items([('learning_rate', 0.046), ('max_depth', 3), ('alpha', 0.0004255651584950091), ('lambda', 0.00025360004314215346)])],
+#  [0.9, dict_items([('learning_rate', 0.046), ('max_depth', 3), ('alpha', 2.005615409682022e-06), ('lambda', 0.012323717308285877)])]]
+
+data = pd.read_csv('glass_data.csv')
+# 预测玻璃的折射率（RI）
+X = data.drop(['Id', 'RI', 'Type'], axis=1)
+y = data['RI']
+
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+k = 10
+
+
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1) ** k
+    t = t / gamma(k + 1)
+    return t
+
+
+def f(x):
+    return (x ** 2) / 2
+
+
+def ncasual(coef, x, f):
+    global k
+    p4 = []
+    p5 = []
+    for i in range(0, k):
+        temp1 = f(x + i)
+        temp2 = f(x - i)
+        p4.append(temp1)
+        p5.append(temp2)
+    out = (sum(np.array(coef).T * (np.array(p5) - np.array(p4))))
+    return out
+
+
+def custom_train(y_true, y_pred):
+    global t, epsilon
+    residual = (y_true - y_pred).astype("float")
+    grad = -ncasual(coef, residual, f)
+    hess = np.where(residual < 0, 1.0, 1.0)
+    return grad, hess
+
+
+rs = []
+for i, ordered in enumerate(orders):
+
+    pa = params[i]
+
+    coef = []
+    pa = params[i]
+    for i in range(0, k):
+        coef.append(coefficient(i, ordered))
+
+    coef = [coef] * train_num
+
+    xgbr = xgb.XGBRegressor(**pa)
+    evals_results = {}
+
+    xgbr.set_params(**{'objective': custom_train},
+                    n_estimators=400)
+
+    # fitting model
+    xgbr.fit(x_train, y_train, eval_set=[(x_valid, y_valid)], eval_metric=['mae', 'rmse'])
+
+    pred_y = xgbr.predict(x_valid)
+    # y_valid = y_valid.to_numpy().reshape(test_num,1)
+
+    a = xgbr.evals_result_.pop('validation_0')
+    out = pd.DataFrame(a['rmse'])
+    out1 = pd.DataFrame(a['mae'])
+
+    from sklearn.metrics import mean_absolute_percentage_error as mape
+
+    rs.append([
+        ordered,
+        mae(y_valid, pred_y),
+        r2_score(y_valid, pred_y),
+        mape(y_valid, pred_y),
+        mse(y_valid, pred_y) ** (1 / 2)
+    ])
+
+print(rs)
+# = pd.DataFrame(evals_result)
+# a.to_excel('./1.xlsx')
+
+
+# out = pd.DataFrame(a['rmse'])
+# out1 = pd.DataFrame(pred_y)
+# out.to_csv('output/fom.csv')
+# out1.to_csv('output/fopred.csv')
+# plt.plot(pred_y,label = 'pred')
+# plt.plot(y_valid, label = 'true')
+# plt.legend()
+# plt.show()
+
+
+# = pd.DataFrame(evals_result)
+# a.to_excel('./1.xlsx')
+
+
+
+
+
+import pandas as pd
+import optuna
+import random
+import xgboost as xgb
+from xgboost import XGBRegressor
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import r2_score
+
+# orders = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+orders = [0.9]
+
+data = pd.read_csv('glass_data.csv')
+# 预测玻璃的折射率（RI）
+X = data.drop(['Id', 'RI', 'Type'], axis=1)
+y = data['RI']
+
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+k = 10
+ls = []
+for ordered in orders:
+    def coefficient(k, ordered):
+        t = 1
+        for i in range(0, k):
+            t *= (ordered - i)
+        t *= (-1) ** k
+        t = t / gamma(k + 1)
+        return t
+
+
+    # 计算系数
+    coef = []
+    for i in range(0, k):
+        coef.append(coefficient(i, ordered))
+
+    coef = [coef] * train_num
+
+
+    def f(x):
+        return (x ** 2) / 2
+
+
+    def ncasual(coef, x, f):
+        global k
+        p4 = []
+        p5 = []
+        for i in range(0, k):
+            temp1 = f(x + i)
+            temp2 = f(x - i)
+            p4.append(temp1)
+            p5.append(temp2)
+        out = (sum(np.array(coef).T * (np.array(p5) - np.array(p4))))
+        return out
+
+
+    def custom_train(y_true, y_pred):
+        global t, epsilon
+        residual = (y_true - y_pred).astype("float")
+        grad = -ncasual(coef, residual, f)
+        hess = np.where(residual < 0, 1.0, 1.0)
+        return grad, hess
+
+
+    xgbr = xgb.XGBRegressor()
+
+
+    def objective(trial):
+        pruning_callback = optuna.integration.LightGBMPruningCallback(trial, mse)
+        params = {
+            'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.251, step=0.005),
+            'max_depth': trial.suggest_int('max_depth', 3, 10, step=1),
+            "alpha": trial.suggest_float("alpha", 1e-8, 10.0, log=True),
+            "lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
+        }
+        model = XGBRegressor(**params, n_estimators=400, objective=custom_train)
+        model.fit(x_train, y_train)
+        pred_y = model.predict(x_valid)
+        score = mse(y_valid, pred_y) ** (1 / 2)
+        return score
+
+
+    study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner)
+
+    study.optimize(objective, n_trials=300)
+
+    # print("Number of finished trials: ({})".format(len(study.trials)))
+
+    # print("Best trial:")
+    trial = study.best_trial
+    ls.append([ordered, trial.params.items()])
+# print("  Value: {}".format(trial.value))
+
+# print("  Params: ")
+# for key, value in trial.params.items():
+# 	print("    {}: {}".format(key, value))
+print(ls)
+
+
+
+import pandas as pd
+import random
+import xgboost as xgb
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+data = pd.read_csv('glass_data.csv')
+# 预测玻璃的折射率（RI）
+X = data.drop(['Id', 'RI', 'Type'], axis=1)
+y = data['RI']
+
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+y_valid = y_valid.to_numpy().reshape(test_num, 1)
+
+# default lightgbm model with sklearn api
+xgbr = xgb.XGBRegressor()
+
+evals_results = {}
+# updating objective function to custom
+# default is "regression"
+# also adding metrics to check different scores
+xgbr.set_params(
+    learning_rate = 0.121,
+    max_depth = 6,
+    alpha = 1.514760673377851e-07,
+    reg_lambda = 5.611928563889623e-08,
+    n_estimators = 400)
+
+# fitting model
+xgbr.fit(x_train, y_train, eval_set=[(x_valid, y_valid)], eval_metric=['mae', 'rmse'])
+
+pred_y = xgbr.predict(x_valid)
+
+# y_valid = y_valid.to_numpy().reshape(test_num,1)
+a = xgbr.evals_result_.pop('validation_0')
+out = pd.DataFrame(a['rmse'])
+out1 = pd.DataFrame(a['mae'])
+
+from sklearn.metrics import mean_absolute_percentage_error as mape
+
+print(f"MAE is {mean_absolute_error(y_valid, pred_y)}")
+print(f"R2 is {r2_score(y_valid, pred_y)}")
+print(f"mape is {mape(y_valid, pred_y)}")
+print(f"rmse is {mean_squared_error(y_valid, pred_y) ** (1 / 2)}")
+
+
+
+
+import pandas as pd
+import optuna
+import random
+import xgboost as xgb
+from xgboost import XGBRegressor
+from math import *
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import r2_score
+
+data = pd.read_csv('glass_data.csv')
+# 预测玻璃的折射率（RI）
+X = data.drop(['Id', 'RI', 'Type'], axis=1)
+y = data['RI']
+
+x_train, x_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=4)
+test_num = x_valid.shape[0]
+train_num = x_train.shape[0]
+
+# default lightgbm model with sklearn api
+xgbr = xgb.XGBRegressor()
+
+
+def objective(trial):
+    pruning_callback = optuna.integration.LightGBMPruningCallback(trial, mse)
+    params = {
+        'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.251, step=0.005),
+        'max_depth': trial.suggest_int('max_depth', 3, 10, step=1),
+        "alpha": trial.suggest_float("alpha", 1e-8, 10.0, log=True),
+        "lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
+    }
+    model = XGBRegressor(**params, n_estimators=400)
+    model.fit(x_train, y_train)
+    pred_y = model.predict(x_valid)
+    score = r2_score(y_valid, pred_y)
+    return score
+
+
+study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner)
+
+study.optimize(objective, n_trials=300)
+
+print("Number of finished trials: ({})".format(len(study.trials)))
+
+print("Best trial:")
+trial = study.best_trial
+
+print("  Value: {}".format(trial.value))
+
+print("  Params: ")
+for key, value in trial.params.items():
+    print("    {}: {}".format(key, value))
