@@ -1,0 +1,1381 @@
+import numpy as np
+from math import *
+import matplotlib.pyplot as plt
+import random
+from sympy import *  # 新增导入sympy库
+import time  # 新增导入time库
+
+# 新增matplotlib配置
+plt.rcParams['axes.linewidth'] = 1  # 图框宽度
+plt.rcParams['figure.dpi'] = 500  # plt.show显示分辨率
+font = {'family': 'serif',
+        'serif': 'Times New Roman',
+        'weight': 'normal',
+        'size': 20}
+plt.rc('font', **font)
+from matplotlib import rcParams
+config = {
+    "font.size": 22,
+    "mathtext.fontset":'stix',
+}
+rcParams.update(config)
+
+random.seed(1)
+
+# 参数设置
+dim = 10
+ordered = 0.9
+k = 10
+cons = (-1)**ceil(ordered)
+
+# 计算系数
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1)**k
+    t = t / gamma(k + 1)
+    return t
+
+coef = [coefficient(i, ordered) for i in range(k)]
+
+# 非因果梯度计算
+def ncasual(coef, x, f):
+    out = []
+    for i in range(dim):
+        d = np.zeros(dim)
+        p1, p2 = [], []
+        for j in range(k):
+            d[i] = j
+            p1.append(f(x - d))
+            p2.append(f(x + d))
+        tempg = sum(np.array(coef) * (np.array(p1) - np.array(p2)))
+        out.append(tempg)
+    return out
+
+# 十维测试函数
+def f(x):
+    return sum((x)**2)  # 最优解为全0向量，这里你原注释有误，按代码逻辑是全0最优
+
+# 初始化
+x0 = [np.array([-1.93845074, 0.61316893, 0.55588845, 1.09837749, 0.57744463,
+       0.88693044, -1.73273436, -1.69572682, -2.01954265, 2.37503699])]
+f0 = [f(x0[0])]
+num_iters = 100
+lr = 0.01
+
+# 优化过程
+for i in range(num_iters):
+    gradient = ncasual(coef, x0[i], f)
+    new_x = x0[i] - lr * np.array(gradient)
+    x0.append(new_x)
+    f0.append(f(new_x))
+
+# 转换为numpy数组便于处理
+x_history = np.array(x0)  # 形状: (101, 10)
+
+# 创建画布
+plt.figure(figsize=(10, 8))  # 调整图像大小为10*8
+
+# 参数变化图
+colors = plt.cm.tab10(np.linspace(0, 1, dim))  # 10种颜色
+lines = []
+labels = []
+for d in range(dim):
+    line, = plt.plot(x_history[:, d],
+                     color=colors[d],
+                     linestyle='-',
+                     linewidth=1.5,
+                     alpha=0.8)
+    lines.append(line)
+    labels.append(f'Dim {d + 1}')
+
+# 绘制目标参考线
+for d in range(dim):
+    plt.axhline(y=0, color='black', linestyle='--', alpha=0.5)
+
+plt.xlabel('Step', fontsize=15)
+plt.ylabel('X', fontsize=15)
+
+# 设置图例标签竖着排列
+plt.legend(lines, labels, loc='upper right', ncol=1, fontsize=15) 
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+
+# 保存并显示图像
+plt.savefig('parameter_trajectories.png', dpi=450, bbox_inches='tight')
+plt.show()
+
+
+from sympy import *
+from math import *
+import numpy as np
+import time
+import random
+import matplotlib.pyplot as plt
+
+plt.rcParams['axes.linewidth'] = 1  # 图框宽度
+plt.rcParams['figure.dpi'] = 500  # plt.show显示分辨率
+font = {'family': 'serif',
+        'serif': 'Times New Roman',
+        'weight': 'normal',
+        'size': 22}
+plt.rc('font', **font)
+
+from matplotlib import rcParams
+
+config = {
+    "font.size": 20,
+    "mathtext.fontset": 'stix',
+}
+rcParams.update(config)
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# 十维参数设置
+dim = 10
+ordered = 0.7
+k = 10  # 截断
+cons = (-1) ** ceil(ordered)
+
+
+# 计算系数
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1) ** k
+    t = t / gamma(k + 1)
+    return t
+
+
+coef = []
+for i in range(0, k):
+    coef.append(coefficient(i, ordered))
+
+
+# 十维测试函数
+def f(x):
+    x = np.array(x)  # 添加类型转换
+    return np.sum((x) ** 2)
+
+
+# 十维测试函数的梯度
+def df(x):
+    return 2 * (x)
+
+
+# 非因果GL导数值 - 十维版本
+def ncasual(coef, x, f):
+    global k, dim
+    out = []
+    for i in range(0, dim):
+        d = np.zeros(dim)
+        p1, p2 = [], []
+        for j in range(0, k):
+            d[i] = j
+            temp1 = f(x - d)
+            temp2 = f(x + d)
+            p1.append(temp1)
+            p2.append(temp2)
+        tempg = sum(np.array(coef) * (np.array(p1) - np.array(p2)))
+        out.append(tempg)
+    return np.array(out)
+
+
+# 非因果梯度下降算法 - 十维版本
+def ncgd(x0, f, learning_rate, num_iters):
+    time1 = time.time()
+    global k, coef, dim
+    x = np.array(x0).copy()
+    ncx = [x.copy()]
+    ncf = [f(x)]
+    a = None
+    for i in range(0, num_iters):
+        grad = ncasual(coef, x, f)
+        x -= learning_rate * grad
+        ncx.append(x.copy())
+        b = f(x)
+        ncf.append(b)
+        if i == 4:
+            print('5 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(ncx[-2])) < 1e-5:
+            a = 0
+            print('非因果梯度下降算法收敛：', i)
+    print(f'非因果梯度下降算法收敛误差:{abs(f(ncx[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of NGLFGD', t,'s')
+    return x, ncf, ncx
+
+
+# 梯度下降算法 - 十维版本
+def gradient_descent(f, df, x0, learning_rate, num_iters):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    gdx = [x.copy()]
+    gdf = [f(x)]
+    a = None
+    for i in range(num_iters):
+        grad = df(x)
+        x -= learning_rate * grad
+        gdx.append(x.copy())
+        b = f(x)
+        gdf.append(b)
+        if i == 4:
+            print('5 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(gdx[-2])) < 1e-5:
+            a = 0
+            print('GD收敛', i)
+    print(f'GD收敛误差:{abs(f(gdx[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of GD', t,'s')
+    return x, gdf, gdx
+
+
+learning_rate = 0.08
+num_iters = 100
+x0 = 10 * np.random.rand(dim)  # 初始点改为10维随机向量
+x0 = np.array([1.07953308, -2.12060655, 2.72969085, -2.25355171, 3.35844621, -3.44865001, -2.49860772, -0.76956684,
+               1.11010021, -0.9435552])
+
+# 运行算法
+nc, ncgd1, ncglx = ncgd(x0, f, learning_rate, num_iters)
+gd, gdgd, gdx = gradient_descent(f, df, x0, 0.06, num_iters)
+
+# 符号计算部分 (使用第一个维度作为示例)
+x, h, c = symbols('x h c', real=True)
+fx1 = (f(np.array([x] + [5] * (dim - 1))) - f(np.array([x - h] + [5] * (dim - 1)))) / h
+grx = df(np.array([x] + [5] * (dim - 1)))[0]  # 一阶导
+grx2 = 2  # 二阶导 (f(x) = (x-5)^2 的二阶导数为2)
+
+# 初始化
+alpha = 0.7
+mu = 0.08
+
+# Algorithm 1（可变积分下限）
+gx1 = (grx / gamma(2 - alpha)) * (abs(x - c) ** (1 - alpha)) + (
+        (grx2 * gamma(alpha) / gamma(alpha - 1)) * gamma(3 - alpha)) * (abs(x - c) ** (2 - alpha))
+# Algorithm 2（截断高阶项）
+e = 0.0001
+gx2 = (grx / gamma(2 - alpha)) * ((abs(x - c) + e) ** (1 - alpha))
+
+# 初始化跟踪变量 (使用第一个维度作为示例)
+outputx1 = [x0[0]]
+outputf1 = [f(x0)]
+outputx2 = [x0[0]]
+outputf2 = [f(x0)]
+outputx3 = [x0[0]]
+outputf3 = [f(x0)]
+mu1 = 0.08
+
+# 算法1：可变积分下限K=3
+time1 = time.time()
+a = None
+current_x = x0.copy()
+# 初始化每个维度的历史记录
+history = [[current_x[d]] for d in range(dim)]
+outputx1 = [current_x[0]]  # 记录第一个维度的历史
+
+for i in range(num_iters):
+    grad = np.zeros(dim)
+    if i <= 2:
+        # 使用c=0计算所有维度的梯度
+        for d in range(dim):
+            grad[d] = float(gx1.subs({x: current_x[d], c: 0}))
+    else:
+        # 使用各维度i-3的历史值作为c
+        for d in range(dim):
+            c_val = history[d][i - 3]  # 直接访问，因为history[d]的长度足够
+            grad[d] = float(gx1.subs({x: current_x[d], c: c_val}))
+
+    current_x -= mu1 * grad
+
+    # 更新各维度的历史记录
+    for d in range(dim):
+        history[d].append(current_x[d])
+
+    outputx1.append(current_x[0])
+
+    b = f(current_x)
+    outputf1.append(b)
+    if i == 4:
+        print('5 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == 19:
+        print('20 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == num_iters - 1:
+        print('final loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if a is None and i > 10 and abs(b - outputf1[-2]) < 1e-5:
+        a = 0
+        print('算法1收敛', i)
+print(f'算法1收敛误差:{abs(f(current_x) - 0)}')
+t = time.time() - time1
+print('Time of 算法1', t,'s')
+
+# 算法2：截断高阶项
+time2 = time.time()
+a = None
+current_x = x0.copy()
+for i in range(100):
+    # 计算梯度 (使用第一个维度作为示例)
+    grad_x = gx2.subs({x: current_x[0], c: 0})
+    grad = np.zeros(dim)
+    grad[0] = float(grad_x)
+    for d in range(1, dim):
+        grad_d = gx2.subs({x: current_x[d], c: 0})
+        grad[d] = float(grad_d)
+
+    current_x -= mu * grad
+    outputx2.append(current_x[0])
+
+    b = f(current_x)
+    outputf2.append(b)
+    if i == 4:
+        print('5 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == 19:
+        print('20 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == num_iters - 1:
+        print('final loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if a is None and i > 10 and abs(b - outputf2[-2]) < 1e-5:
+        a = 0
+        print('算法2收敛', i)
+print(f'算法2收敛误差:{abs(f(current_x) - 0)}')
+t = time.time() - time2
+print('Time of 算法2', t,'s')
+
+# 算法3：可变分数阶
+time3 = time.time()
+a = None
+current_x = x0.copy()
+beta = 0.002
+for i in range(100):
+    # 计算每个维度的分数阶
+    a3 = np.zeros(dim)
+    for d in range(dim):
+        grad_d = df(current_x)[d]
+        a3[d] = 1 - tanh(beta * (grad_d ** 2))
+        if a3[d] == 1:
+            a3[d] = 0.9
+
+    # 计算梯度
+    grad = np.zeros(dim)
+    for d in range(dim):
+        a3_d = a3[d]
+        gx3 = ((grx / gamma(2 - a3_d)) * (abs(x - c) ** (1 - a3_d)) + (
+                grx2 * gamma(a3_d) / ((gamma(a3_d - 1)) * gamma(3 - a3_d))) * (abs(x - c) ** (2 - a3_d))).subs(
+            {x: current_x[d], c: 0})
+        grad[d] = float(gx3)
+
+    current_x -= mu * grad
+    outputx3.append(current_x[0])
+
+    b = f(current_x)
+    outputf3.append(b)
+    if i == 4:
+        print('5 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == 19:
+        print('20 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == num_iters - 1:
+        print('final loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if a is None and i > 10 and abs(b - outputf3[-2]) < 1e-5:
+        a = 0
+        print('算法3收敛', i)
+print(f'算法3收敛误差:{abs(f(current_x) - 0)}')
+t = time.time() - time3
+print('Time of 算法3', t,'s')
+
+# 可视化 (仅展示第一个维度的结果)
+plt.figure(figsize=(12, 7), dpi=500)
+plt.plot([x[0] for x in gdx], linestyle='--', label='GD')
+plt.plot(outputx1, marker='2', label='Algorithm 1', color='peru', markevery=10)
+plt.plot(outputx2, marker='3', label='Algorithm 2', color='m', markevery=10)
+plt.plot(outputx3, marker='4', label='Algorithm 3', color='y', markevery=10)
+plt.plot([x[0] for x in ncglx], label='NGLFGD', linestyle='-', color='r')
+plt.scatter(0, x0[0], color="black", s=100, zorder=10, label='Starting Point')
+plt.ylabel('x$_0$', fontsize=26)
+plt.xlabel('step', fontsize=26)
+plt.legend(loc='upper right', fontsize=25)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+#plt.savefig('testfunction6wyhx1.png', bbox_inches='tight', dpi=450)
+
+plt.figure(figsize=(12, 7), dpi=500)
+plt.plot(gdgd, linestyle='--', label='GD')
+plt.plot(outputf1, marker='2', label='Algorithm 1', color='peru', markevery=6)
+plt.plot(outputf2, marker='3', label='Algorithm 2', color='m', markevery=6)
+plt.plot(outputf3, marker='4', label='Algorithm 3', color='y', markevery=6)
+plt.plot(ncgd1, label='NGLFGD', linestyle='-', color='r')
+plt.scatter(0, f(x0), color="black", s=100, zorder=10, label='Starting Point')
+plt.ylabel('z', fontsize=26)
+plt.xlabel('step', fontsize=26)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+plt.legend(loc='upper right', fontsize=25)
+#plt.savefig('testfunction6wyhf.png', bbox_inches='tight', dpi=500)
+plt.show()
+
+from sympy import *
+from math import *
+import numpy as np
+import time
+import random
+import matplotlib.pyplot as plt
+
+plt.rcParams['axes.linewidth'] = 1  # 图框宽度
+plt.rcParams['figure.dpi'] = 500  # plt.show显示分辨率
+font = {'family': 'serif',
+        'serif': 'Times New Roman',
+        'weight': 'normal',
+        'size': 22}
+plt.rc('font', **font)
+
+from matplotlib import rcParams
+
+config = {
+    "font.size": 20,
+    "mathtext.fontset": 'stix',
+}
+rcParams.update(config)
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# 十维参数设置
+dim = 10
+ordered = 0.9
+k = 10  # 截断
+cons = (-1) ** ceil(ordered)
+
+
+# 计算系数
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1) ** k
+    t = t / gamma(k + 1)
+    return t
+
+
+coef = []
+for i in range(0, k):
+    coef.append(coefficient(i, ordered))
+
+
+# 十维测试函数
+def f(x):
+    x = np.array(x)  # 添加类型转换
+    return np.sum((x) ** 2)
+
+
+# 十维测试函数的梯度
+def df(x):
+    return 2 * (x)
+
+
+# 非因果GL导数值 - 十维版本
+def ncasual(coef, x, f):
+    global k, dim
+    out = []
+    for i in range(0, dim):
+        d = np.zeros(dim)
+        p1, p2 = [], []
+        for j in range(0, k):
+            d[i] = j
+            temp1 = f(x - d)
+            temp2 = f(x + d)
+            p1.append(temp1)
+            p2.append(temp2)
+        tempg = sum(np.array(coef) * (np.array(p1) - np.array(p2)))
+        out.append(tempg)
+    return np.array(out)
+
+
+# 非因果梯度下降算法 - 十维版本
+def ncgd(x0, f, learning_rate, num_iters):
+    time1 = time.time()
+    global k, coef, dim
+    x = np.array(x0).copy()
+    ncx = [x.copy()]
+    ncf = [f(x)]
+    a = None
+    for i in range(0, num_iters):
+        grad = ncasual(coef, x, f)
+        x -= learning_rate * grad
+        ncx.append(x.copy())
+        b = f(x)
+        ncf.append(b)
+        if i == 4:
+            print('5 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(ncx[-2])) < 1e-5:
+            a = 0
+            print('非因果梯度下降算法收敛：', i)
+    print(f'非因果梯度下降算法收敛误差:{abs(f(ncx[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of NGLFGD', t,'s')
+    return x, ncf, ncx
+
+
+# 梯度下降算法 - 十维版本
+def gradient_descent(f, df, x0, learning_rate, num_iters):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    gdx = [x.copy()]
+    gdf = [f(x)]
+    a = None
+    for i in range(num_iters):
+        grad = df(x)
+        x -= learning_rate * grad
+        gdx.append(x.copy())
+        b = f(x)
+        gdf.append(b)
+        if i == 4:
+            print('5 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(gdx[-2])) < 1e-5:
+            a = 0
+            print('GD收敛', i)
+    print(f'GD收敛误差:{abs(f(gdx[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of GD', t,'s')
+    return x, gdf, gdx
+
+
+learning_rate = 0.08
+num_iters = 100
+x0 = 10 * np.random.rand(dim)  # 初始点改为10维随机向量
+x0 = np.array([1.07953308, -2.12060655, 2.72969085, -2.25355171, 3.35844621, -3.44865001, -2.49860772, -0.76956684,
+               1.11010021, -0.9435552])
+
+# 运行算法
+nc, ncgd1, ncglx = ncgd(x0, f, learning_rate, num_iters)
+gd, gdgd, gdx = gradient_descent(f, df, x0, 0.06, num_iters)
+
+# 符号计算部分 (使用第一个维度作为示例)
+x, h, c = symbols('x h c', real=True)
+fx1 = (f(np.array([x] + [5] * (dim - 1))) - f(np.array([x - h] + [5] * (dim - 1)))) / h
+grx = df(np.array([x] + [5] * (dim - 1)))[0]  # 一阶导
+grx2 = 2  # 二阶导 (f(x) = (x-5)^2 的二阶导数为2)
+
+# 初始化
+alpha = 0.7
+mu = 0.08
+
+# Algorithm 1（可变积分下限）
+gx1 = (grx / gamma(2 - alpha)) * (abs(x - c) ** (1 - alpha)) + (
+        (grx2 * gamma(alpha) / gamma(alpha - 1)) * gamma(3 - alpha)) * (abs(x - c) ** (2 - alpha))
+# Algorithm 2（截断高阶项）
+e = 0.0001
+gx2 = (grx / gamma(2 - alpha)) * ((abs(x - c) + e) ** (1 - alpha))
+
+# 初始化跟踪变量 (使用第一个维度作为示例)
+outputx1 = [x0[0]]
+outputf1 = [f(x0)]
+outputx2 = [x0[0]]
+outputf2 = [f(x0)]
+outputx3 = [x0[0]]
+outputf3 = [f(x0)]
+mu1 = 0.15
+
+# 算法1：可变积分下限K=3
+time1 = time.time()
+a = None
+current_x = x0.copy()
+# 初始化每个维度的历史记录
+history = [[current_x[d]] for d in range(dim)]
+outputx1 = [current_x[0]]  # 记录第一个维度的历史
+
+for i in range(num_iters):
+    grad = np.zeros(dim)
+    if i <= 2:
+        # 使用c=0计算所有维度的梯度
+        for d in range(dim):
+            grad[d] = float(gx1.subs({x: current_x[d], c: 0}))
+    else:
+        # 使用各维度i-3的历史值作为c
+        for d in range(dim):
+            c_val = history[d][i - 3]  # 直接访问，因为history[d]的长度足够
+            grad[d] = float(gx1.subs({x: current_x[d], c: c_val}))
+
+    current_x -= mu1 * grad
+
+    # 更新各维度的历史记录
+    for d in range(dim):
+        history[d].append(current_x[d])
+
+    outputx1.append(current_x[0])
+
+    b = f(current_x)
+    outputf1.append(b)
+    if i == 4:
+        print('5 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == 19:
+        print('20 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == num_iters - 1:
+        print('final loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if a is None and i > 10 and abs(b - outputf1[-2]) < 1e-5:
+        a = 0
+        print('算法1收敛', i)
+print(f'算法1收敛误差:{abs(f(current_x) - 0)}')
+t = time.time() - time1
+print('Time of 算法1', t,'s')
+
+# 算法2：截断高阶项
+time2 = time.time()
+a = None
+current_x = x0.copy()
+for i in range(100):
+    # 计算梯度 (使用第一个维度作为示例)
+    grad_x = gx2.subs({x: current_x[0], c: 0})
+    grad = np.zeros(dim)
+    grad[0] = float(grad_x)
+    for d in range(1, dim):
+        grad_d = gx2.subs({x: current_x[d], c: 0})
+        grad[d] = float(grad_d)
+
+    current_x -= mu * grad
+    outputx2.append(current_x[0])
+
+    b = f(current_x)
+    outputf2.append(b)
+    if i == 4:
+        print('5 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == 19:
+        print('20 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == num_iters - 1:
+        print('final loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if a is None and i > 10 and abs(b - outputf2[-2]) < 1e-5:
+        a = 0
+        print('算法2收敛', i)
+print(f'算法2收敛误差:{abs(f(current_x) - 0)}')
+t = time.time() - time2
+print('Time of 算法2', t,'s')
+
+# 算法3：可变分数阶
+time3 = time.time()
+a = None
+current_x = x0.copy()
+beta = 0.002
+for i in range(100):
+    # 计算每个维度的分数阶
+    a3 = np.zeros(dim)
+    for d in range(dim):
+        grad_d = df(current_x)[d]
+        a3[d] = 1 - tanh(beta * (grad_d ** 2))
+        if a3[d] == 1:
+            a3[d] = 0.9
+
+    # 计算梯度
+    grad = np.zeros(dim)
+    for d in range(dim):
+        a3_d = a3[d]
+        gx3 = ((grx / gamma(2 - a3_d)) * (abs(x - c) ** (1 - a3_d)) + (
+                grx2 * gamma(a3_d) / ((gamma(a3_d - 1)) * gamma(3 - a3_d))) * (abs(x - c) ** (2 - a3_d))).subs(
+            {x: current_x[d], c: 0})
+        grad[d] = float(gx3)
+
+    current_x -= mu * grad
+    outputx3.append(current_x[0])
+
+    b = f(current_x)
+    outputf3.append(b)
+    if i == 4:
+        print('5 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == 19:
+        print('20 step loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if i == num_iters - 1:
+        print('final loss')
+        print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+    if a is None and i > 10 and abs(b - outputf3[-2]) < 1e-5:
+        a = 0
+        print('算法3收敛', i)
+print(f'算法3收敛误差:{abs(f(current_x) - 0)}')
+t = time.time() - time3
+print('Time of 算法3', t,'s')
+
+# 可视化 (仅展示第一个维度的结果)
+plt.figure(figsize=(12, 7), dpi=500)
+plt.plot([x[0] for x in gdx], linestyle='--', label='GD')
+plt.plot(outputx1, marker='2', label='Algorithm 1', color='peru', markevery=10)
+plt.plot(outputx2, marker='3', label='Algorithm 2', color='m', markevery=10)
+plt.plot(outputx3, marker='4', label='Algorithm 3', color='y', markevery=10)
+plt.plot([x[0] for x in ncglx], label='NGLFGD', linestyle='-', color='r')
+plt.scatter(0, x0[0], color="black", s=100, zorder=10, label='Starting Point')
+plt.ylabel('x$_0$', fontsize=26)
+plt.xlabel('step', fontsize=26)
+plt.legend(loc='upper right', fontsize=25)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+plt.savefig('testfunction6wyhx1.png', bbox_inches='tight', dpi=450)
+
+plt.figure(figsize=(12, 7), dpi=500)
+plt.plot(gdgd, linestyle='--', label='GD')
+plt.plot(outputf1, marker='2', label='Algorithm 1', color='peru', markevery=6)
+plt.plot(outputf2, marker='3', label='Algorithm 2', color='m', markevery=6)
+plt.plot(outputf3, marker='4', label='Algorithm 3', color='y', markevery=6)
+plt.plot(ncgd1, label='NGLFGD', linestyle='-', color='r')
+plt.scatter(0, f(x0), color="black", s=100, zorder=10, label='Starting Point')
+plt.ylabel('z', fontsize=26)
+plt.xlabel('step', fontsize=26)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+plt.legend(loc='upper right', fontsize=25)
+plt.savefig('testfunction6wyhf.png', bbox_inches='tight', dpi=500)
+plt.show()
+
+from sympy import *
+from math import *
+from sympy import symbols, Eq, solve
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import pyplot as plt
+import random
+import time
+import warnings
+
+warnings.filterwarnings('ignore')
+import matplotlib.pyplot as plt
+
+plt.rcParams['axes.linewidth'] = 1  # 图框宽度
+plt.rcParams['figure.dpi'] = 500  # plt.show显示分辨率
+font = {'family':'serif',
+       'serif': 'Times New Roman',
+        'weight': 'normal',
+       'size': 22}
+plt.rc('font', **font)
+
+from matplotlib import rcParams
+
+config = {
+    "font.size": 20,
+    "mathtext.fontset":'stix',
+}
+rcParams.update(config)
+random.seed(10)
+
+ordered = 0.9
+k = 10  # 截断
+cons = (-1) ** ceil(ordered)
+dim = 10  # 十维空间
+
+# 计算系数
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1) ** k
+    t = t / gamma(k + 1)
+    return t
+
+coef = []
+for i in range(0, k):
+    coef.append(coefficient(i, ordered))
+
+# 十维非因果GL导数值
+def ncasual(coef, x, f):
+    global k, dim
+    out = []
+    for i in range(0, dim):
+        d = np.zeros(dim)
+        p1, p2 = [], []
+        for j in range(0, k):
+            d[i] = j
+            temp1 = f(x - d)
+            temp2 = f(x + d)
+            p1.append(temp1)
+            p2.append(temp2)
+        tempg = sum(np.array(coef) * (np.array(p1) - np.array(p2)))
+        out.append(tempg)
+    return out
+
+# 十维非因果梯度下降算法
+def ncgd(x0, f, learning_rate, num_iters):
+    time1 = time.time()
+    global k, coef, dim
+    x = np.array(x0).copy()
+    nc = [x.copy()]
+    a = None
+    for i in range(0, num_iters):
+        grad = ncasual(coef, x, f)
+        x -= learning_rate * np.array(grad)
+        nc.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(nc[-2])) < 1e-5:
+            a = 0
+            print('非因果梯度下降算法收敛：', i)
+    print(f'非因果梯度下降算法收敛误差:{abs(f(nc[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of NGLFGD', t,'s')
+    return x.copy(), nc
+
+# 十维梯度下降算法
+def gradient_descent(f, df, x0, learning_rate, num_iters):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    gd = [x.copy()]
+    a = None
+    los = []
+    for i in range(num_iters):
+        grad = df(x)
+        x -= learning_rate * np.array(grad)
+        gd.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(gd[-2])) < 1e-5:
+            a = 0
+            print('GD收敛', i)
+    print(f'GD收敛误差:{abs(f(gd[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of GD', t,'s')
+    return x.copy(), gd
+
+# 十维随机梯度下降
+def stochastic_gradient_descent(f, df, x0, learning_rate, num_iters):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    sgd = [x.copy()]
+    los = []
+    a = None
+    c = 0
+    for i in range(num_iters):
+        rand_dim = random.randint(0, dim - 1)  # 随机选择一个维度
+        c = c + 1
+        grad = df(x)
+        temp = np.zeros(dim)
+        temp[rand_dim] = grad[rand_dim]
+        x -= learning_rate * temp
+        sgd.append(x.copy())
+        b = f(x)
+        if c == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if c == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if c == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and c > 10 and abs(f(x) - f(sgd[-2])) < 1e-5:
+            a = 0
+            print('SGD收敛', c)
+    print(f'SGD收敛误差:{abs(f(sgd[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of SGD', t,'s')
+    return x.copy(), sgd
+
+# 十维Nesterov Accelerated Gradient
+def nag(f, df, x0, learning_rate, num_iters, momentum=0.99):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    v = np.zeros(dim)
+    nag_path = [x.copy()]
+    a = None
+    for i in range(num_iters):
+        grad = df(x - momentum * v)
+        v = momentum * v + learning_rate * np.array(grad)
+        x -= v
+        nag_path.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(nag_path[-2])) < 1e-5:
+            a = 0
+            print('NAG收敛', i)
+    print(f'NAG收敛误差:{abs(f(nag_path[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of NAG', t,'s')
+    return x.copy(), nag_path
+
+# 十维Adam优化器
+def adam(f, df, x0, learning_rate, num_iters, beta1=0.9, beta2=0.999, epsilon=1e-8):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    m = np.zeros(dim)  # 一阶矩估计
+    v = np.zeros(dim)  # 二阶矩估计
+    ada = [x.copy()]
+    a = None
+    for i in range(1, num_iters + 1):
+        grad = df(x)
+        m = beta1 * m + (1 - beta1) * np.array(grad)
+        v = beta2 * v + (1 - beta2) * np.array(grad) ** 2
+        m_hat = m / (1 - beta1 ** i)
+        v_hat = v / (1 - beta2 ** i)
+        x -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+        ada.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(ada[-2])) < 1e-5:
+            a = 0
+            print('Adam收敛', i)
+    print(f'Adam收敛误差:{abs(f(ada[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of Adam', t,'s')
+    return x.copy(), ada
+
+# 十维动量梯度下降
+def momdg(f, df, x0, learning_rate, num_iters, beta=0.9):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    v = np.zeros(dim)
+    mdg = [x.copy()]
+    a = None
+    for i in range(num_iters):
+        grad = df(x)
+        v = beta * v + (1 - beta) * np.array(grad)  # 更新v
+        x = x - learning_rate * v
+        mdg.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(mdg[-2])) < 1e-5:
+            a = 0
+            print('GDM收敛', i)
+    print(f'GDM收敛误差:{abs(f(mdg[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of GDM', t,'s')
+    return x.copy(), mdg
+
+
+# 十维测试函数
+def f(x):
+    x = np.array(x)
+    return np.sum(x ** 2)
+
+# 十维测试函数的梯度
+def df(x):
+    return 2 * x
+
+# 初始化参数
+# 初始点每个值减5
+x0 = 10 * np.random.rand(dim) - 5
+learning_rate = 0.01
+num_iters = 800
+
+# 运行各种优化算法
+nc, ncgd1 = ncgd(x0, f, learning_rate, num_iters)
+gd, gdgd = gradient_descent(f, df, x0, learning_rate, num_iters)
+sg, sggd = stochastic_gradient_descent(f, df, x0, learning_rate, num_iters)
+ng, nggd = nag(f, df, x0, learning_rate, num_iters)
+ad, adgd = adam(f, df, x0, learning_rate, num_iters)
+#mg, mgdg = momdg(f, df, x0, learning_rate, num_iters)
+
+# 结果可视化
+paths = [gdgd, sggd, nggd, adgd, ncgd1]
+labels = ['GD', 'SGD', 'Nesterov', 'Adam', 'NGLFGD']
+linestyles = ['-.', '--', ':', '-.', '-']
+colors = ['#1f77b4','m', 'g', 'k', 'r']
+markers = ['o','s', '^', 'D', 'x']  # 添加标记样式
+# 绘制目标函数f的收敛路径图
+plt.figure(figsize=(12, 7), dpi=500)
+
+gd_values = [f(x) for x in gdgd]
+sgd_values = [f(x) for x in sggd]
+nag_values = [f(x) for x in nggd]
+adam_values = [f(x) for x in adgd]
+nglfgd_values = [f(x) for x in ncgd1]
+
+plt.plot(gd_values, linestyle='--', label='GD', color='#1f77b4')
+plt.plot(sgd_values, marker='2', label='SGD', color='peru', markevery=5)
+plt.plot(nag_values, marker='3', label='Nesterov', color='m', markevery=5)
+plt.plot(adam_values, marker='4', label='Adam', color='y', markevery=5)
+plt.plot(nglfgd_values, label='NGLFGD', linestyle='-', color='r')
+
+plt.scatter(0, f(x0), color="black", s=100, zorder=10, label='Starting Point')
+plt.ylabel('z', fontsize=26)
+plt.xlabel('Step', fontsize=26)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+plt.legend(loc='upper right', fontsize=20)
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.savefig('testfunction6f.png', bbox_inches='tight', dpi=500)
+plt.show()
+
+
+from sympy import *
+from math import *
+from sympy import symbols, Eq, solve
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import pyplot as plt
+import random
+import time
+import warnings
+
+warnings.filterwarnings('ignore')
+import matplotlib.pyplot as plt
+
+plt.rcParams['axes.linewidth'] = 1  # 图框宽度
+plt.rcParams['figure.dpi'] = 500  # plt.show显示分辨率
+font = {'family':'serif',
+       'serif': 'Times New Roman',
+        'weight': 'normal',
+       'size': 22}
+plt.rc('font', **font)
+
+from matplotlib import rcParams
+
+config = {
+    "font.size": 20,
+    "mathtext.fontset":'stix',
+}
+rcParams.update(config)
+random.seed(3)
+
+ordered = 0.6
+k = 10  # 截断
+cons = (-1) ** ceil(ordered)
+dim = 10  # 十维空间
+
+# 计算系数
+def coefficient(k, ordered):
+    t = 1
+    for i in range(0, k):
+        t *= (ordered - i)
+    t *= (-1) ** k
+    t = t / gamma(k + 1)
+    return t
+
+coef = []
+for i in range(0, k):
+    coef.append(coefficient(i, ordered))
+
+# 十维非因果GL导数值
+def ncasual(coef, x, f):
+    global k, dim
+    out = []
+    for i in range(0, dim):
+        d = np.zeros(dim)
+        p1, p2 = [], []
+        for j in range(0, k):
+            d[i] = j
+            temp1 = f(x - d)
+            temp2 = f(x + d)
+            p1.append(temp1)
+            p2.append(temp2)
+        tempg = sum(np.array(coef) * (np.array(p1) - np.array(p2)))
+        out.append(tempg)
+    return out
+
+# 十维非因果梯度下降算法
+def ncgd(x0, f, learning_rate, num_iters):
+    time1 = time.time()
+    global k, coef, dim
+    x = np.array(x0).copy()
+    nc = [x.copy()]
+    a = None
+    for i in range(0, num_iters):
+        grad = ncasual(coef, x, f)
+        x -= learning_rate * np.array(grad)
+        nc.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(nc[-2])) < 1e-5:
+            a = 0
+            print('非因果梯度下降算法收敛：', i)
+    print(f'非因果梯度下降算法收敛误差:{abs(f(nc[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of NGLFGD', t,'s')
+    return x.copy(), nc
+
+# 十维梯度下降算法
+def gradient_descent(f, df, x0, learning_rate, num_iters):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    gd = [x.copy()]
+    a = None
+    los = []
+    for i in range(num_iters):
+        grad = df(x)
+        x -= learning_rate * np.array(grad)
+        gd.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(gd[-2])) < 1e-5:
+            a = 0
+            print('GD收敛', i)
+    print(f'GD收敛误差:{abs(f(gd[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of GD', t,'s')
+    return x.copy(), gd
+
+# 十维随机梯度下降
+def stochastic_gradient_descent(f, df, x0, learning_rate, num_iters):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    sgd = [x.copy()]
+    los = []
+    a = None
+    c = 0
+    for i in range(num_iters):
+        rand_dim = random.randint(0, dim - 1)  # 随机选择一个维度
+        c = c + 1
+        grad = df(x)
+        temp = np.zeros(dim)
+        temp[rand_dim] = grad[rand_dim]
+        x -= learning_rate * temp
+        sgd.append(x.copy())
+        b = f(x)
+        if c == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if c == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if c == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and c > 10 and abs(f(x) - f(sgd[-2])) < 1e-5:
+            a = 0
+            print('SGD收敛', c)
+    print(f'SGD收敛误差:{abs(f(sgd[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of SGD', t,'s')
+    return x.copy(), sgd
+
+# 十维Nesterov Accelerated Gradient
+def nag(f, df, x0, learning_rate, num_iters, momentum=0.99):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    v = np.zeros(dim)
+    nag_path = [x.copy()]
+    a = None
+    for i in range(num_iters):
+        grad = df(x - momentum * v)
+        v = momentum * v + learning_rate * np.array(grad)
+        x -= v
+        nag_path.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(nag_path[-2])) < 1e-5:
+            a = 0
+            print('NAG收敛', i)
+    print(f'NAG收敛误差:{abs(f(nag_path[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of NAG', t,'s')
+    return x.copy(), nag_path
+
+# 十维Adam优化器
+def adam(f, df, x0, learning_rate, num_iters, beta1=0.95, beta2=0.95, epsilon=1e-8):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    m = np.zeros(dim)  # 一阶矩估计
+    v = np.zeros(dim)  # 二阶矩估计
+    ada = [x.copy()]
+    a = None
+    for i in range(1, num_iters + 1):
+        grad = df(x)
+        m = beta1 * m + (1 - beta1) * np.array(grad)
+        v = beta2 * v + (1 - beta2) * np.array(grad) ** 2
+        m_hat = m / (1 - beta1 ** i)
+        v_hat = v / (1 - beta2 ** i)
+        x -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+        ada.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(ada[-2])) < 1e-5:
+            a = 0
+            print('Adam收敛', i)
+    print(f'Adam收敛误差:{abs(f(ada[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of Adam', t,'s')
+    return x.copy(), ada
+
+# 十维动量梯度下降
+def momdg(f, df, x0, learning_rate, num_iters, beta=0.95):
+    time1 = time.time()
+    x = np.array(x0).copy()
+    v = np.zeros(dim)
+    mdg = [x.copy()]
+    a = None
+    for i in range(num_iters):
+        grad = df(x)
+        v = beta * v + (1 - beta) * np.array(grad)  # 更新v
+        x = x - learning_rate * v
+        mdg.append(x.copy())
+        b = f(x)
+        if i == 19:
+            print('20 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == 99:
+            print('100 step loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if i == num_iters - 1:
+            print('final loss')
+            print(((1 / 2) * (b - 0) ** (2)) ** (1 / 2))
+        if a is None and i > 10 and abs(f(x) - f(mdg[-2])) < 1e-5:
+            a = 0
+            print('GDM收敛', i)
+    print(f'GDM收敛误差:{abs(f(mdg[-1]) - 0)}')
+    t = time.time() - time1
+    print('Time of GDM', t,'s')
+    return x.copy(), mdg
+
+
+# 十维测试函数
+def f(x):
+    x = np.array(x)
+    return np.sum(x ** 2)
+
+# 十维测试函数的梯度
+def df(x):
+    return 2 * x
+
+# 初始化参数
+# 初始点每个值减5
+x0 = 10 * np.random.rand(dim) - 5
+learning_rate = 0.02
+num_iters = 800
+
+# 运行各种优化算法
+nc, ncgd1 = ncgd(x0, f, learning_rate, num_iters)
+gd, gdgd = gradient_descent(f, df, x0, learning_rate, num_iters)
+sg, sggd = stochastic_gradient_descent(f, df, x0, learning_rate, num_iters)
+ng, nggd = nag(f, df, x0, learning_rate, num_iters)
+ad, adgd = adam(f, df, x0, learning_rate, num_iters)
+#mg, mgdg = momdg(f, df, x0, learning_rate, num_iters)
+
+# 结果可视化
+paths = [gdgd, sggd, nggd, adgd, ncgd1]
+labels = ['GD', 'SGD', 'Nesterov', 'Adam', 'NGLFGD']
+linestyles = ['-.', '--', ':', '-.', '-']
+colors = ['#1f77b4','m', 'g', 'k', 'r']
+markers = ['o','s', '^', 'D', 'x']  # 添加标记样式
+# 绘制目标函数f的收敛路径图
+plt.figure(figsize=(12, 7), dpi=500)
+
+gd_values = [f(x) for x in gdgd]
+sgd_values = [f(x) for x in sggd]
+nag_values = [f(x) for x in nggd]
+adam_values = [f(x) for x in adgd]
+nglfgd_values = [f(x) for x in ncgd1]
+
+plt.plot(gd_values, linestyle='--', label='GD', color='#1f77b4')
+plt.plot(sgd_values, marker='2', label='SGD', color='peru', markevery=18)
+plt.plot(nag_values, marker='3', label='Nesterov', color='m', markevery=18)
+plt.plot(adam_values, marker='4', label='Adam', color='y', markevery=18)
+plt.plot(nglfgd_values, label='NGLFGD', linestyle='-', color='r')
+
+plt.scatter(0, f(x0), color="black", s=100, zorder=10, label='Starting Point')
+plt.ylabel('z', fontsize=26)
+plt.xlabel('step', fontsize=26)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+plt.legend(loc='upper right', fontsize=20)
+#plt.grid(True, linestyle='--', alpha=0.7)
+plt.savefig('testfunction6f.png', bbox_inches='tight', dpi=500)
+plt.show()
